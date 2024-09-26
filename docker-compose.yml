@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  vectorstore-api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data/vectorstore
+    environment:
+      - PERSIST_DIRECTORY=/data/vectorstore
