@@ -47,5 +47,5 @@ async def test_query():
     results = await query("What is the capital of France?", "test", 5)
     print(results)
 
-asyncio.run(test_query())
+# asyncio.run(test_query())
 # Add more endpoints as needed (update, delete, etc.)
