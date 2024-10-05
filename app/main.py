@@ -17,22 +17,30 @@ class Document(BaseModel):
 
 @app.post("/add_document")
 async def add_document(document: Document, collection_name: str):
-    collection = chroma_client.get_or_create_collection(collection_name)
-    collection.add(
+    try:
+        collection = chroma_client.get_or_create_collection(collection_name)
+        collection.add(
         documents=[document.content],
         metadatas=[document.metadata],
         ids=[document.id]
-    )
-    return {"message": "Document added successfully"}
+        )
+        return {"message": "Document added successfully"}
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail="Failed to add document")
 
 @app.get("/query")
 async def query(query_text: str, collection_name: str, n_results: int = 5):
-    collection = chroma_client.get_collection(collection_name)
-    results = collection.query(
+    try:
+        collection = chroma_client.get_collection(collection_name)
+        results = collection.query(
         query_texts=[query_text],
         n_results=n_results
-    )
-    return results
+        )
+        return results
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail="Failed to query")
 
 
 async def test_query():
