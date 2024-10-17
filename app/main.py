@@ -25,9 +25,17 @@ class Document(BaseModel):
     content: str
     metadata: dict
 
+def create_persist_directory(collection_type: str) -> str:
+    unique_persist_dir = os.path.join(PERSIST_DIRECTORY, collection_type)
+    if not os.path.exists(unique_persist_dir):
+        os.makedirs(unique_persist_dir, exist_ok=True)
+        logger.info(f"Created persist directory for collection type: {collection_type}")
+    return unique_persist_dir
+
 @app.post("/add_document")
 async def add_document(document: Document, collection_name: str):
     try:
+        create_persist_directory(collection_name)
         collection = get_chroma_client().get_or_create_collection(collection_name)
         existing_docs = collection.get(ids=[document.id])
         if existing_docs['ids']:
@@ -54,6 +62,7 @@ async def add_document(document: Document, collection_name: str):
 @app.get("/query")
 async def query(query_text: str, collection_name: str, n_results: int = 5):
     try:
+        create_persist_directory(collection_name)
         collection = get_chroma_client().get_collection(collection_name)
         total_docs = collection.count()
         n_results = min(n_results, total_docs)
