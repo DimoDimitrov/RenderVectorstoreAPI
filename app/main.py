@@ -16,11 +16,14 @@ app = FastAPI()
 
 PERSIST_DIRECTORY = os.environ.get("PERSIST_DIRECTORY", "/data/vectorstore")
 
-# Initialize ChromaDB client
 def get_chroma_client(collection_name: str):
     unique_persist_dir = os.path.join(PERSIST_DIRECTORY, collection_name)
     os.makedirs(unique_persist_dir, exist_ok=True)
-    return chromadb.PersistentClient(path=unique_persist_dir)
+    logger.info(f"Creating ChromaDB client for collection: {collection_name}")
+    logger.info(f"Persist directory: {unique_persist_dir}")
+    client = chromadb.PersistentClient(path=unique_persist_dir)
+    logger.info(f"ChromaDB client created successfully for collection: {collection_name}")
+    return client
 
 class Document(BaseModel):
     id: str
@@ -28,13 +31,13 @@ class Document(BaseModel):
     metadata: dict
 
 @app.post("/create_persist_directory")
-def create_persist_directory(collection_name: str) -> str:
+def create_persist_directory(collection_name: str) -> dict:
     try:
         unique_persist_dir = os.path.join(PERSIST_DIRECTORY, collection_name)
         if not os.path.exists(unique_persist_dir):
             os.makedirs(unique_persist_dir, exist_ok=True)
         logger.info(f"Created persist directory for collection: {collection_name}")
-        return unique_persist_dir
+        return {"message": f"Persist directory created for collection: {collection_name}", "path": unique_persist_dir}
     except Exception as e:
         logger.error(f"Error creating persist directory: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create persist directory: {str(e)}")
@@ -44,11 +47,8 @@ async def add_document(document: Document, collection_name: str):
     try:
         create_persist_directory(collection_name)
         client = get_chroma_client(collection_name)
-        try:
-            collection = client.get_or_create_collection(collection_name)
-        except InvalidCollectionException:
-            collection = client.create_collection(collection_name)
-            logger.info(f"Created new collection: {collection_name}")
+        collection = client.get_or_create_collection(collection_name)
+        logger.info(f"Got or created collection: {collection_name}")
 
         existing_docs = collection.get(ids=[document.id])
         if existing_docs['ids']:
@@ -76,11 +76,8 @@ async def query(query_text: str, collection_name: str, n_results: int = 5):
     try:
         create_persist_directory(collection_name)
         client = get_chroma_client(collection_name)
-        try:
-            collection = client.get_collection(collection_name)
-        except InvalidCollectionException:
-            logger.warning(f"Collection {collection_name} does not exist")
-            return {"results": [], "message": "Collection does not exist"}
+        collection = client.get_or_create_collection(collection_name)
+        logger.info(f"Got or created collection: {collection_name}")
 
         total_docs = collection.count()
         if total_docs == 0:
