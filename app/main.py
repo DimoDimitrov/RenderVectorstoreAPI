@@ -25,12 +25,17 @@ class Document(BaseModel):
     content: str
     metadata: dict
 
+@app.post("/create_persist_directory")
 def create_persist_directory(collection_type: str) -> str:
-    unique_persist_dir = os.path.join(PERSIST_DIRECTORY, collection_type)
-    if not os.path.exists(unique_persist_dir):
-        os.makedirs(unique_persist_dir, exist_ok=True)
+    try:
+        unique_persist_dir = os.path.join(PERSIST_DIRECTORY, collection_type)
+        if not os.path.exists(unique_persist_dir):
+            os.makedirs(unique_persist_dir, exist_ok=True)
         logger.info(f"Created persist directory for collection type: {collection_type}")
-    return unique_persist_dir
+        return unique_persist_dir
+    except Exception as e:
+        logger.error(f"Error creating persist directory: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create persist directory: {str(e)}")
 
 @app.post("/add_document")
 async def add_document(document: Document, collection_name: str):
