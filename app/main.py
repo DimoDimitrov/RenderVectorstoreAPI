@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import chromadb
+from chromadb.errors import InvalidCollectionException
 import os
 from typing import List
 import logging
@@ -16,9 +17,9 @@ app = FastAPI()
 PERSIST_DIRECTORY = os.environ.get("PERSIST_DIRECTORY", "/data/vectorstore")
 
 # Initialize ChromaDB client
-@lru_cache()
-def get_chroma_client():
-    return chromadb.PersistentClient(path=PERSIST_DIRECTORY)
+def get_chroma_client(collection_name: str):
+    unique_persist_dir = os.path.join(PERSIST_DIRECTORY, collection_name)
+    return chromadb.PersistentClient(path=unique_persist_dir)
 
 class Document(BaseModel):
     id: str
@@ -26,12 +27,12 @@ class Document(BaseModel):
     metadata: dict
 
 @app.post("/create_persist_directory")
-def create_persist_directory(collection_type: str) -> str:
+def create_persist_directory(collection_name: str) -> str:
     try:
-        unique_persist_dir = os.path.join(PERSIST_DIRECTORY, collection_type)
+        unique_persist_dir = os.path.join(PERSIST_DIRECTORY, collection_name)
         if not os.path.exists(unique_persist_dir):
             os.makedirs(unique_persist_dir, exist_ok=True)
-        logger.info(f"Created persist directory for collection type: {collection_type}")
+        logger.info(f"Created persist directory for collection: {collection_name}")
         return unique_persist_dir
     except Exception as e:
         logger.error(f"Error creating persist directory: {e}", exc_info=True)
@@ -41,7 +42,13 @@ def create_persist_directory(collection_type: str) -> str:
 async def add_document(document: Document, collection_name: str):
     try:
         create_persist_directory(collection_name)
-        collection = get_chroma_client().get_or_create_collection(collection_name)
+        client = get_chroma_client(collection_name)
+        try:
+            collection = client.get_or_create_collection(collection_name)
+        except InvalidCollectionException:
+            collection = client.create_collection(collection_name)
+            logger.info(f"Created new collection: {collection_name}")
+
         existing_docs = collection.get(ids=[document.id])
         if existing_docs['ids']:
             collection.update(
@@ -63,13 +70,22 @@ async def add_document(document: Document, collection_name: str):
         logger.error(f"Error adding/updating document: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to add/update document: {str(e)}")
 
-
 @app.get("/query")
 async def query(query_text: str, collection_name: str, n_results: int = 5):
     try:
         create_persist_directory(collection_name)
-        collection = get_chroma_client().get_collection(collection_name)
+        client = get_chroma_client(collection_name)
+        try:
+            collection = client.get_collection(collection_name)
+        except InvalidCollectionException:
+            logger.warning(f"Collection {collection_name} does not exist")
+            return {"results": [], "message": "Collection does not exist"}
+
         total_docs = collection.count()
+        if total_docs == 0:
+            logger.warning(f"Collection {collection_name} is empty")
+            return {"results": [], "message": "Collection is empty"}
+
         n_results = min(n_results, total_docs)
         results = collection.query(
             query_texts=[query_text],
@@ -81,22 +97,34 @@ async def query(query_text: str, collection_name: str, n_results: int = 5):
     except Exception as e:
         logger.error(f"Error querying: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to query: {str(e)}")
-    
 
 @app.delete("/delete_documents")
 async def delete_documents(document_ids: List[str], collection_name: str):
     try:
-        collection = get_chroma_client().get_or_create_collection(collection_name)
+        client = get_chroma_client(collection_name)
+        try:
+            collection = client.get_collection(collection_name)
+        except InvalidCollectionException:
+            logger.warning(f"Collection {collection_name} does not exist")
+            return {"message": "Collection does not exist, no documents deleted"}
+
         collection.delete(ids=document_ids)
         return {"message": f"{len(document_ids)} documents deleted successfully"}
     except Exception as e:
-        print(f"Error deleting documents: {e}")
+        logger.error(f"Error deleting documents: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete documents")
 
 @app.put("/update_documents")
 async def update_documents(documents: List[Document], collection_name: str):
     try:
-        collection = get_chroma_client().get_or_create_collection(collection_name)
+        create_persist_directory(collection_name)
+        client = get_chroma_client(collection_name)
+        try:
+            collection = client.get_or_create_collection(collection_name)
+        except InvalidCollectionException:
+            collection = client.create_collection(collection_name)
+            logger.info(f"Created new collection: {collection_name}")
+
         for doc in documents:
             collection.update(
                 ids=[doc.id],
@@ -105,7 +133,7 @@ async def update_documents(documents: List[Document], collection_name: str):
             )
         return {"message": f"{len(documents)} documents updated successfully"}
     except Exception as e:
-        print(f"Error updating documents: {e}")
+        logger.error(f"Error updating documents: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update documents")
 
 # if __name__ == "__main__":
