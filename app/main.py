@@ -19,6 +19,7 @@ PERSIST_DIRECTORY = os.environ.get("PERSIST_DIRECTORY", "/data/vectorstore")
 # Initialize ChromaDB client
 def get_chroma_client(collection_name: str):
     unique_persist_dir = os.path.join(PERSIST_DIRECTORY, collection_name)
+    os.makedirs(unique_persist_dir, exist_ok=True)
     return chromadb.PersistentClient(path=unique_persist_dir)
 
 class Document(BaseModel):
