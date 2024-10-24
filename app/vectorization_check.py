@@ -1,7 +1,7 @@
-import threading
-from fastapi import FastAPI, HTTPException
-from typing import Dict, List
+from fastapi import FastAPI, HTTPException, Query
+from typing import Dict
 from pydantic import BaseModel
+import threading
 import time
 import logging
 
@@ -53,7 +53,7 @@ agent_check = AgentCheck()
 app = FastAPI()
 
 @app.post("/check_agent")
-async def check_agent(agent_id: str, config: AgentConfig):
+async def check_agent(agent_id: str = Query(...), config: AgentConfig = None):
     result = agent_check.check_and_register_agent(agent_id, config)
     return result
 
