@@ -18,6 +18,7 @@ class AgentCheck:
 
     def check_and_register_agent(self, agent_id: str, config: AgentConfig) -> Dict[str, bool]:
         with self.lock:
+            print(f"Checking agent {agent_id} with config {config.hour}:{config.minute}")
             current_time = time.time()
             current_hour = time.localtime(current_time).tm_hour
             current_minute = time.localtime(current_time).tm_min
@@ -40,6 +41,7 @@ class AgentCheck:
 
     def delete_agent(self, agent_id: str) -> Dict[str, str]:
         with self.lock:
+            print(f"Deleting agent {agent_id}")
             if agent_id in self.agents:
                 del self.agents[agent_id]
                 return {"message": f"Agent {agent_id} deleted successfully"}
