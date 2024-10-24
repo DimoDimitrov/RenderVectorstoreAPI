@@ -7,12 +7,16 @@ from typing import List
 import logging
 from functools import lru_cache
 
+from .vectorization_check import check_agent, delete_agent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 app = FastAPI()
+
+app.add_api_route("/check_agent", check_agent, methods=["POST"])
+app.add_api_route("/delete_agent/{agent_id}", delete_agent, methods=["DELETE"])
 
 PERSIST_DIRECTORY = os.environ.get("PERSIST_DIRECTORY", "/data/vectorstore")
 
