@@ -20,6 +20,7 @@ app.add_api_route("/delete_agent/{agent_id}", delete_agent, methods=["DELETE"])
 
 PERSIST_DIRECTORY = os.environ.get("PERSIST_DIRECTORY", "/data/vectorstore")
 
+@lru_cache(maxsize=None)
 def get_chroma_client(collection_name: str):
     unique_persist_dir = os.path.join(PERSIST_DIRECTORY, collection_name)
     os.makedirs(unique_persist_dir, exist_ok=True)
@@ -28,6 +29,13 @@ def get_chroma_client(collection_name: str):
     client = chromadb.PersistentClient(path=unique_persist_dir)
     logger.info(f"ChromaDB client created successfully for collection: {collection_name}")
     return client
+
+@lru_cache(maxsize=None)
+def get_or_create_collection(collection_name: str):
+    client = get_chroma_client(collection_name)
+    collection = client.get_or_create_collection(collection_name)
+    logger.info(f"Got or created collection: {collection_name}")
+    return collection
 
 class Document(BaseModel):
     id: str
@@ -49,11 +57,7 @@ def create_persist_directory(collection_name: str) -> dict:
 @app.post("/add_document")
 async def add_document(document: Document, collection_name: str):
     try:
-        create_persist_directory(collection_name)
-        client = get_chroma_client(collection_name)
-        collection = client.get_or_create_collection(collection_name)
-        logger.info(f"Got or created collection: {collection_name}")
-
+        collection = get_or_create_collection(collection_name)
         existing_docs = collection.get(ids=[document.id])
         if existing_docs['ids']:
             collection.update(
@@ -78,11 +82,7 @@ async def add_document(document: Document, collection_name: str):
 @app.get("/query")
 async def query(query_text: str, collection_name: str, n_results: int = 5):
     try:
-        create_persist_directory(collection_name)
-        client = get_chroma_client(collection_name)
-        collection = client.get_or_create_collection(collection_name)
-        logger.info(f"Got or created collection: {collection_name}")
-
+        collection = get_or_create_collection(collection_name)
         total_docs = collection.count()
         if total_docs == 0:
             logger.warning(f"Collection {collection_name} is empty")
