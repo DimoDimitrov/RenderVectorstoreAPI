@@ -9,7 +9,11 @@ from functools import lru_cache
 
 from .vectorization_check import check_agent, delete_agent
 
-logging.basicConfig(level=logging.INFO)
+# Enhanced logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 
@@ -22,28 +26,31 @@ PERSIST_DIRECTORY = os.environ.get("PERSIST_DIRECTORY", "/data/vectorstore")
 
 @lru_cache(maxsize=None)
 def get_chroma_client(collection_name: str):
-    unique_persist_dir = os.path.join(PERSIST_DIRECTORY, collection_name)
-    os.makedirs(unique_persist_dir, exist_ok=True)
-    logger.info(f"Creating ChromaDB client for collection: {collection_name}")
-    logger.info(f"Persist directory: {unique_persist_dir}")
-    client = chromadb.PersistentClient(path=unique_persist_dir)
-    logger.info(f"ChromaDB client created successfully for collection: {collection_name}")
-    return client
+    try:
+        unique_persist_dir = os.path.join(PERSIST_DIRECTORY, collection_name)
+        os.makedirs(unique_persist_dir, exist_ok=True)
+        logger.info(f"Creating ChromaDB client for collection: {collection_name}")
+        logger.info(f"Persist directory: {unique_persist_dir}")
+        client = chromadb.PersistentClient(path=unique_persist_dir)
+        # Test the connection
+        client.heartbeat()
+        logger.info(f"ChromaDB client created and tested successfully for collection: {collection_name}")
+        return client
+    except Exception as e:
+        logger.error(f"Failed to create ChromaDB client: {str(e)}", exc_info=True)
+        raise
 
 @lru_cache(maxsize=None)
 def get_or_create_collection(collection_name: str):
-    client = get_chroma_client(collection_name)
-    collection = client.get_or_create_collection(
-        name=collection_name,
-        metadata={
-            "hnsw:space": "cosine",  # or "l2" depending on your needs
-            "hnsw:construction_ef": 100,  # Increase for better accuracy during construction
-            "hnsw:search_ef": 100,    # Increase for better search accuracy
-            "hnsw:M": 16,            # Number of connections per element
-        }
-    )
-    logger.info(f"Got or created collection: {collection_name}")
-    return collection
+    try:
+        client = get_chroma_client(collection_name)
+        collection = client.get_or_create_collection(collection_name)
+        count = collection.count()
+        logger.info(f"Got or created collection: {collection_name} with {count} documents")
+        return collection
+    except Exception as e:
+        logger.error(f"Error in get_or_create_collection: {str(e)}", exc_info=True)
+        raise
 
 class Document(BaseModel):
     id: str
@@ -91,38 +98,16 @@ async def add_document(document: Document, collection_name: str):
 async def query(query_text: str, collection_name: str, n_results: int = 5):
     try:
         collection = get_or_create_collection(collection_name)
-        total_docs = collection.count()
-        if total_docs == 0:
-            logger.warning(f"Collection {collection_name} is empty")
-            return {"results": [], "message": "Collection is empty"}
-
-        n_results = min(n_results, total_docs)
-        try:
-            results = collection.query(
-                query_texts=[query_text],
-                n_results=n_results,
-                include=["metadatas", "documents", "distances"]
-            )
-            logger.info(f"Query successful: {query_text}")
-            return results
-        except RuntimeError as e:
-            # Fallback with increased search_ef if the initial query fails
-            logger.warning(f"Initial query failed, attempting with increased search_ef: {str(e)}")
-            results = collection.query(
-                query_texts=[query_text],
-                n_results=n_results,
-                include=["metadatas", "documents", "distances"],
-                search_ef=200  # Increased search_ef for fallback
-            )
-            logger.info(f"Query successful with increased search_ef: {query_text}")
-            return results
-            
+        results = collection.query(
+            query_texts=[query_text],
+            n_results=n_results,
+            include=["metadatas", "documents", "distances"]
+        )
+        logger.info(f"Query successful: {query_text}")
+        return results
     except Exception as e:
         logger.error(f"Error querying: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Failed to query: {str(e)}. Try reducing n_results or contact administrator."
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to query: {str(e)}")
 
 @app.delete("/delete_documents")
 async def delete_documents(document_ids: List[str], collection_name: str):
