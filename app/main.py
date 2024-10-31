@@ -33,7 +33,15 @@ def get_chroma_client(collection_name: str):
 @lru_cache(maxsize=None)
 def get_or_create_collection(collection_name: str):
     client = get_chroma_client(collection_name)
-    collection = client.get_or_create_collection(collection_name)
+    collection = client.get_or_create_collection(
+        name=collection_name,
+        metadata={
+            "hnsw:space": "cosine",  # or "l2" depending on your needs
+            "hnsw:construction_ef": 100,  # Increase for better accuracy during construction
+            "hnsw:search_ef": 100,    # Increase for better search accuracy
+            "hnsw:M": 16,            # Number of connections per element
+        }
+    )
     logger.info(f"Got or created collection: {collection_name}")
     return collection
 
@@ -89,16 +97,32 @@ async def query(query_text: str, collection_name: str, n_results: int = 5):
             return {"results": [], "message": "Collection is empty"}
 
         n_results = min(n_results, total_docs)
-        results = collection.query(
-            query_texts=[query_text],
-            n_results=n_results,
-            include=["metadatas", "documents", "distances"]
-        )
-        logger.info(f"Query successful: {query_text}")
-        return results
+        try:
+            results = collection.query(
+                query_texts=[query_text],
+                n_results=n_results,
+                include=["metadatas", "documents", "distances"]
+            )
+            logger.info(f"Query successful: {query_text}")
+            return results
+        except RuntimeError as e:
+            # Fallback with increased search_ef if the initial query fails
+            logger.warning(f"Initial query failed, attempting with increased search_ef: {str(e)}")
+            results = collection.query(
+                query_texts=[query_text],
+                n_results=n_results,
+                include=["metadatas", "documents", "distances"],
+                search_ef=200  # Increased search_ef for fallback
+            )
+            logger.info(f"Query successful with increased search_ef: {query_text}")
+            return results
+            
     except Exception as e:
         logger.error(f"Error querying: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to query: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to query: {str(e)}. Try reducing n_results or contact administrator."
+        )
 
 @app.delete("/delete_documents")
 async def delete_documents(document_ids: List[str], collection_name: str):
