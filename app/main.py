@@ -47,10 +47,10 @@ def get_or_create_collection(collection_name: str):
         collection = client.get_or_create_collection(
             name=collection_name,
             metadata={
-                "hnsw:space": "cosine",        # Distance metric for similarity
-                "hnsw:M": 48,                  # Number of connections per element (default: 16)
-                "hnsw:ef_construction": 100,   # Size of dynamic candidate list (default: 40)
-                "hnsw:ef": 50                  # Size of dynamic candidate list at query time
+                "hnsw:space": "cosine",
+                "hnsw:M": 128,
+                "hnsw:ef_construction": 200,
+                "hnsw:ef": 100
             }
         )
         count = collection.count()
@@ -143,9 +143,9 @@ async def update_documents(documents: List[Document], collection_name: str):
                 name=collection_name,
                 metadata={
                     "hnsw:space": "cosine",
-                    "hnsw:M": 48,
-                    "hnsw:ef_construction": 100,
-                    "hnsw:ef": 50
+                    "hnsw:M": 128,
+                    "hnsw:ef_construction": 200,
+                    "hnsw:ef": 100
                 }
             )
         except InvalidCollectionException:
@@ -153,9 +153,9 @@ async def update_documents(documents: List[Document], collection_name: str):
                 name=collection_name,
                 metadata={
                     "hnsw:space": "cosine",
-                    "hnsw:M": 48,
-                    "hnsw:ef_construction": 100,
-                    "hnsw:ef": 50
+                    "hnsw:M": 128,
+                    "hnsw:ef_construction": 200,
+                    "hnsw:ef": 100
                 }
             )
             logger.info(f"Created new collection: {collection_name}")
