@@ -44,20 +44,66 @@ def get_chroma_client(collection_name: str):
 def get_or_create_collection(collection_name: str):
     try:
         client = get_chroma_client(collection_name)
-        collection = client.get_or_create_collection(
-            name=collection_name,
-            metadata={
-                "hnsw:space": "cosine",
-                "hnsw:M": 128,
-                "hnsw:ef_construction": 200,
-                "hnsw:ef": 100
-            }
-        )
-        count = collection.count()
-        logger.info(f"Got or created collection: {collection_name} with {count} documents")
-        return collection
+        
+        try:
+            # Try to get existing collection
+            collection = client.get_collection(name=collection_name)
+            
+            # Get current metadata
+            current_metadata = collection.metadata()
+            
+            # Check if HNSW settings exist
+            if not any(key.startswith('hnsw:') for key in current_metadata.keys()):
+                logger.info(f"Collection {collection_name} exists but lacks HNSW settings. Recreating...")
+                
+                # Get all existing documents
+                existing_docs = collection.get()
+                
+                # Delete old collection
+                client.delete_collection(collection_name)
+                
+                # Create new collection with HNSW settings
+                collection = client.create_collection(
+                    name=collection_name,
+                    metadata={
+                        "hnsw:space": "cosine",
+                        "hnsw:M": 16,
+                        "hnsw:ef_construction": 100,
+                        "hnsw:ef": 50,
+                        "hnsw:allow_replace_deleted": False
+                    }
+                )
+                
+                # Reinsert documents if they exist
+                if existing_docs['ids']:
+                    collection.add(
+                        ids=existing_docs['ids'],
+                        documents=existing_docs['documents'],
+                        metadatas=existing_docs['metadatas'] if 'metadatas' in existing_docs else None,
+                        embeddings=existing_docs['embeddings'] if 'embeddings' in existing_docs else None
+                    )
+                    
+                logger.info(f"Successfully recreated collection {collection_name} with HNSW settings")
+            
+            return collection
+            
+        except InvalidCollectionException:
+            # Create new collection if it doesn't exist
+            collection = client.create_collection(
+                name=collection_name,
+                metadata={
+                    "hnsw:space": "cosine",
+                    "hnsw:M": 16,
+                    "hnsw:ef_construction": 100,
+                    "hnsw:ef": 50,
+                    "hnsw:allow_replace_deleted": False
+                }
+            )
+            logger.info(f"Created new collection: {collection_name}")
+            return collection
+            
     except Exception as e:
-        logger.error(f"Error in get_or_create_collection: {str(e)}", exc_info=True)
+        logger.error(f"Error in get_or_create_collection: {e}", exc_info=True)
         raise
 
 class Document(BaseModel):
