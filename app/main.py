@@ -55,7 +55,7 @@ def get_or_create_collection(collection_name: str):
                 current_metadata = {}
             
             # Check if HNSW settings exist
-            if not any(key.startswith('hnsw:') for key in current_metadata.keys()):
+            if not any(key in ['space', 'M', 'ef_construction', 'ef'] for key in current_metadata.keys()):
                 logger.info(f"Collection {collection_name} exists but lacks HNSW settings. Recreating...")
                 
                 # Get all existing documents
@@ -68,11 +68,10 @@ def get_or_create_collection(collection_name: str):
                 collection = client.create_collection(
                     name=collection_name,
                     metadata={
-                        "hnsw:space": "cosine",
-                        "hnsw:M": 16,
-                        "hnsw:ef_construction": 100,
-                        "hnsw:ef": 50,
-                        "hnsw:allow_replace_deleted": False
+                        "space": "cosine",
+                        "M": 16,
+                        "ef_construction": 100,
+                        "ef": 50
                     }
                 )
                 
@@ -94,11 +93,10 @@ def get_or_create_collection(collection_name: str):
             collection = client.create_collection(
                 name=collection_name,
                 metadata={
-                    "hnsw:space": "cosine",
-                    "hnsw:M": 16,
-                    "hnsw:ef_construction": 100,
-                    "hnsw:ef": 50,
-                    "hnsw:allow_replace_deleted": False
+                    "space": "cosine",
+                    "M": 16,
+                    "ef_construction": 100,
+                    "ef": 50
                 }
             )
             logger.info(f"Created new collection: {collection_name}")
@@ -190,20 +188,20 @@ async def update_documents(documents: List[Document], collection_name: str):
             collection = client.get_or_create_collection(
                 name=collection_name,
                 metadata={
-                    "hnsw:space": "cosine",
-                    "hnsw:M": 128,
-                    "hnsw:ef_construction": 200,
-                    "hnsw:ef": 100
+                    "space": "cosine",
+                    "M": 128,
+                    "ef_construction": 200,
+                    "ef": 100
                 }
             )
         except InvalidCollectionException:
             collection = client.create_collection(
                 name=collection_name,
                 metadata={
-                    "hnsw:space": "cosine",
-                    "hnsw:M": 128,
-                    "hnsw:ef_construction": 200,
-                    "hnsw:ef": 100
+                    "space": "cosine",
+                    "M": 128,
+                    "ef_construction": 200,
+                    "ef": 100
                 }
             )
             logger.info(f"Created new collection: {collection_name}")
