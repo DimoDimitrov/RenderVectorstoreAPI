@@ -50,7 +50,9 @@ def get_or_create_collection(collection_name: str):
             collection = client.get_collection(name=collection_name)
             
             # Get current metadata
-            current_metadata = collection.metadata()
+            current_metadata = collection.metadata
+            if current_metadata is None:
+                current_metadata = {}
             
             # Check if HNSW settings exist
             if not any(key.startswith('hnsw:') for key in current_metadata.keys()):
