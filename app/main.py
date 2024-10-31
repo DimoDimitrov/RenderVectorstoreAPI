@@ -16,6 +16,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+HNSW_SETTINGS = {
+    "space": "cosine",
+    "M": 128,
+    "ef_construction": 200,
+    "ef": 100
+}
 
 app = FastAPI()
 
@@ -49,55 +55,60 @@ def get_or_create_collection(collection_name: str):
             # Try to get existing collection
             collection = client.get_collection(name=collection_name)
             
-            # Get current metadata
-            current_metadata = collection.metadata
-            if current_metadata is None:
-                current_metadata = {}
-            
-            # Check if HNSW settings exist
-            if not any(key in ['space', 'M', 'ef_construction', 'ef'] for key in current_metadata.keys()):
-                logger.info(f"Collection {collection_name} exists but lacks HNSW settings. Recreating...")
+            try:
+                # Get current metadata using get_collection_metadata()
+                current_metadata = collection._client.get_collection_metadata(collection.name)
+                if current_metadata is None:
+                    current_metadata = {}
                 
-                # Get all existing documents
-                existing_docs = collection.get()
-                
-                # Delete old collection
-                client.delete_collection(collection_name)
-                
-                # Create new collection with HNSW settings
-                collection = client.create_collection(
-                    name=collection_name,
-                    metadata={
-                        "space": "cosine",
-                        "M": 16,
-                        "ef_construction": 100,
-                        "ef": 50
-                    }
-                )
-                
-                # Reinsert documents if they exist
-                if existing_docs['ids']:
-                    collection.add(
-                        ids=existing_docs['ids'],
-                        documents=existing_docs['documents'],
-                        metadatas=existing_docs['metadatas'] if 'metadatas' in existing_docs else None,
-                        embeddings=existing_docs['embeddings'] if 'embeddings' in existing_docs else None
+                # Check if HNSW settings exist
+                if not any(key in ['space', 'M', 'ef_construction', 'ef'] for key in current_metadata.keys()):
+                    logger.info(f"Collection {collection_name} exists but lacks HNSW settings. Recreating...")
+                    
+                    # Get all existing documents
+                    try:
+                        existing_docs = collection.get()
+                    except Exception as e:
+                        logger.warning(f"Failed to get existing documents: {e}")
+                        existing_docs = {'ids': []}
+                    
+                    # Delete old collection
+                    client.delete_collection(collection_name)
+                    
+                    # Create new collection with HNSW settings
+                    collection = client.create_collection(
+                        name=collection_name,
+                        metadata=HNSW_SETTINGS
                     )
                     
-                logger.info(f"Successfully recreated collection {collection_name} with HNSW settings")
-            
-            return collection
+                    # Reinsert documents if they exist
+                    if existing_docs['ids']:
+                        collection.add(
+                            ids=existing_docs['ids'],
+                            documents=existing_docs['documents'],
+                            metadatas=existing_docs['metadatas'] if 'metadatas' in existing_docs else None,
+                            embeddings=existing_docs['embeddings'] if 'embeddings' in existing_docs else None
+                        )
+                        
+                    logger.info(f"Successfully recreated collection {collection_name} with HNSW settings")
+                
+                return collection
+                
+            except Exception as e:
+                logger.warning(f"Error accessing collection metadata, recreating collection: {e}")
+                # Delete and recreate collection if metadata access fails
+                client.delete_collection(collection_name)
+                collection = client.create_collection(
+                    name=collection_name,
+                    metadata=HNSW_SETTINGS
+                )
+                return collection
             
         except InvalidCollectionException:
             # Create new collection if it doesn't exist
             collection = client.create_collection(
                 name=collection_name,
-                metadata={
-                    "space": "cosine",
-                    "M": 16,
-                    "ef_construction": 100,
-                    "ef": 50
-                }
+                metadata=HNSW_SETTINGS
             )
             logger.info(f"Created new collection: {collection_name}")
             return collection
@@ -187,12 +198,7 @@ async def update_documents(documents: List[Document], collection_name: str):
         try:
             collection = client.get_or_create_collection(
                 name=collection_name,
-                metadata={
-                    "space": "cosine",
-                    "M": 128,
-                    "ef_construction": 200,
-                    "ef": 100
-                }
+                metadata=HNSW_SETTINGS
             )
         except InvalidCollectionException:
             collection = client.create_collection(
