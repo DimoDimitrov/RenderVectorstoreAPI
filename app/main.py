@@ -44,7 +44,15 @@ def get_chroma_client(collection_name: str):
 def get_or_create_collection(collection_name: str):
     try:
         client = get_chroma_client(collection_name)
-        collection = client.get_or_create_collection(collection_name)
+        collection = client.get_or_create_collection(
+            name=collection_name,
+            metadata={
+                "hnsw:space": "cosine",        # Distance metric for similarity
+                "hnsw:M": 48,                  # Number of connections per element (default: 16)
+                "hnsw:ef_construction": 100,   # Size of dynamic candidate list (default: 40)
+                "hnsw:ef": 50                  # Size of dynamic candidate list at query time
+            }
+        )
         count = collection.count()
         logger.info(f"Got or created collection: {collection_name} with {count} documents")
         return collection
@@ -131,9 +139,25 @@ async def update_documents(documents: List[Document], collection_name: str):
         create_persist_directory(collection_name)
         client = get_chroma_client(collection_name)
         try:
-            collection = client.get_or_create_collection(collection_name)
+            collection = client.get_or_create_collection(
+                name=collection_name,
+                metadata={
+                    "hnsw:space": "cosine",
+                    "hnsw:M": 48,
+                    "hnsw:ef_construction": 100,
+                    "hnsw:ef": 50
+                }
+            )
         except InvalidCollectionException:
-            collection = client.create_collection(collection_name)
+            collection = client.create_collection(
+                name=collection_name,
+                metadata={
+                    "hnsw:space": "cosine",
+                    "hnsw:M": 48,
+                    "hnsw:ef_construction": 100,
+                    "hnsw:ef": 50
+                }
+            )
             logger.info(f"Created new collection: {collection_name}")
 
         for doc in documents:
