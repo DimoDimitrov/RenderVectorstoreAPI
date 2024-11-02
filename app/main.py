@@ -106,8 +106,15 @@ def create_persist_directory(collection_name: str) -> dict:
 async def add_document(document: Document, collection_name: str):
     try:
         collection = get_or_create_collection(collection_name)
-        existing_docs = collection.get(ids=[document.id])
-        if existing_docs['ids']:
+        
+        # Single get call to check existence
+        existing = collection.get(
+            ids=[document.id],
+            include=["metadatas"]  # Minimal data retrieval
+        )
+        
+        if existing['ids']:
+            # Document exists - update
             collection.update(
                 ids=[document.id],
                 documents=[document.content],
@@ -115,14 +122,16 @@ async def add_document(document: Document, collection_name: str):
             )
             logger.info(f"Document updated: {document.id}")
             return {"message": "Document updated successfully"}
-        else:
-            collection.add(
-                documents=[document.content],
-                metadatas=[document.metadata],
-                ids=[document.id]
-            )
-            logger.info(f"Document added: {document.id}")
-            return {"message": "Document added successfully"}
+        
+        # Document doesn't exist - add
+        collection.add(
+            documents=[document.content],
+            metadatas=[document.metadata],
+            ids=[document.id]
+        )
+        logger.info(f"Document added: {document.id}")
+        return {"message": "Document added successfully"}
+            
     except Exception as e:
         logger.error(f"Error adding/updating document: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to add/update document: {str(e)}")
@@ -182,30 +191,44 @@ async def update_documents(documents: List[Document], collection_name: str):
     try:
         create_persist_directory(collection_name)
         client = get_chroma_client(collection_name)
-        try:
-            collection = client.get_or_create_collection(
-                name=collection_name,
-                metadata=HNSW_SETTINGS
-            )
-        except InvalidCollectionException:
-            collection = client.create_collection(
-                name=collection_name,
-                metadata={
-                    "space": "cosine",
-                    "M": 128,
-                    "ef_construction": 200,
-                    "ef": 100
-                }
-            )
-            logger.info(f"Created new collection: {collection_name}")
+        collection = client.get_or_create_collection(
+            name=collection_name,
+            metadata=HNSW_SETTINGS
+        )
 
+        # Get all existing docs in one call
+        all_ids = [doc.id for doc in documents]
+        existing = collection.get(
+            ids=all_ids,
+            include=["metadatas"]
+        )
+        existing_ids = set(existing['ids'])
+
+        # Separate into updates and adds
+        to_update = []
+        to_update_ids = []
+        to_update_metadata = []
+        
         for doc in documents:
+            if doc.id in existing_ids:
+                to_update.append(doc.content)
+                to_update_ids.append(doc.id)
+                to_update_metadata.append(doc.metadata)
+
+        # Perform batch update only for existing documents
+        if to_update:
             collection.update(
-                ids=[doc.id],
-                documents=[doc.content],
-                metadatas=[doc.metadata]
+                ids=to_update_ids,
+                documents=to_update,
+                metadatas=to_update_metadata
             )
-        return {"message": f"{len(documents)} documents updated successfully"}
+            logger.info(f"Updated {len(to_update)} documents")
+            
+        return {
+            "message": f"{len(to_update)} documents updated successfully",
+            "updated_count": len(to_update),
+            "skipped_count": len(documents) - len(to_update)
+        }
     except Exception as e:
         logger.error(f"Error updating documents: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update documents")
