@@ -147,13 +147,32 @@ async def delete_documents(document_ids: List[str], collection_name: str):
     try:
         client = get_chroma_client(collection_name)
         try:
-            collection = client.get_collection(collection_name)
+            collection = client.get_or_create_collection(collection_name)
         except InvalidCollectionException:
             logger.warning(f"Collection {collection_name} does not exist")
             return {"message": "Collection does not exist, no documents deleted"}
 
-        collection.delete(ids=document_ids)
-        return {"message": f"{len(document_ids)} documents deleted successfully"}
+        existing_docs = collection.get(ids=document_ids)
+        existing_ids = existing_docs['ids']
+        
+        if not existing_ids:
+            logger.warning(f"No documents found with the provided IDs in collection {collection_name}")
+            return {"message": "No documents found to delete"}
+
+        # Only delete documents that exist
+        collection.delete(ids=existing_ids)
+        logger.info(f"Successfully deleted {len(existing_ids)} documents")
+        
+        # Report any IDs that weren't found
+        not_found_ids = set(document_ids) - set(existing_ids)
+        if not_found_ids:
+            logger.warning(f"Documents not found for deletion: {not_found_ids}")
+            
+        return {
+            "message": f"{len(existing_ids)} documents deleted successfully",
+            "deleted_ids": existing_ids,
+            "not_found_ids": list(not_found_ids)
+        }
     except Exception as e:
         logger.error(f"Error deleting documents: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete documents")
