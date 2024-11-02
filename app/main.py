@@ -189,46 +189,37 @@ async def delete_documents(document_ids: List[str], collection_name: str):
 @app.put("/update_documents")
 async def update_documents(documents: List[Document], collection_name: str):
     try:
-        create_persist_directory(collection_name)
-        client = get_chroma_client(collection_name)
-        collection = client.get_or_create_collection(
-            name=collection_name,
-            metadata=HNSW_SETTINGS
-        )
-
-        # Get all existing docs in one call
-        all_ids = [doc.id for doc in documents]
-        existing = collection.get(
-            ids=all_ids,
-            include=["metadatas"]
-        )
-        existing_ids = set(existing['ids'])
-
-        # Separate into updates and adds
-        to_update = []
-        to_update_ids = []
-        to_update_metadata = []
+        collection = get_or_create_collection(collection_name)
         
-        for doc in documents:
-            if doc.id in existing_ids:
-                to_update.append(doc.content)
-                to_update_ids.append(doc.id)
-                to_update_metadata.append(doc.metadata)
-
-        # Perform batch update only for existing documents
-        if to_update:
-            collection.update(
-                ids=to_update_ids,
-                documents=to_update,
-                metadatas=to_update_metadata
-            )
-            logger.info(f"Updated {len(to_update)} documents")
+        # Get all existing IDs in the collection
+        existing_docs = collection.get()
+        existing_ids = set(existing_docs['ids']) if existing_docs else set()
+        
+        # Filter documents to only include those that exist
+        docs_to_update = [doc for doc in documents if str(doc.id) in existing_ids]
+        
+        if not docs_to_update:
+            return {"message": "No valid documents to update"}
             
+        # Prepare batch update data
+        ids = [str(doc.id) for doc in docs_to_update]
+        texts = [doc.content for doc in docs_to_update]
+        metadatas = [doc.metadata for doc in docs_to_update]
+        
+        # Perform batch update
+        collection.update(
+            ids=ids,
+            documents=texts,
+            metadatas=metadatas
+        )
+        
+        logger.info(f"Updated {len(docs_to_update)} documents")
         return {
-            "message": f"{len(to_update)} documents updated successfully",
-            "updated_count": len(to_update),
-            "skipped_count": len(documents) - len(to_update)
+            "message": f"Updated {len(docs_to_update)} documents",
+            "updated_ids": ids,
+            "skipped_ids": [str(doc.id) for doc in documents if str(doc.id) not in existing_ids]
         }
+
     except Exception as e:
         logger.error(f"Error updating documents: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update documents")
