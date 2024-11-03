@@ -107,30 +107,54 @@ async def add_document(document: Document, collection_name: str):
     try:
         collection = get_or_create_collection(collection_name)
         
-        # Single get call to check existence
+        # Check if document exists
         existing = collection.get(
-            ids=[document.id],
-            include=["metadatas"]  # Minimal data retrieval
+            ids=[str(document.id)],
+            include=["metadatas"]
         )
         
-        if existing['ids']:
-            # Document exists - update
+        # Split into documents to update and add
+        to_update_ids = []
+        to_update_contents = []
+        to_update_metadata = []
+        
+        to_add_ids = []
+        to_add_contents = []
+        to_add_metadata = []
+        
+        # Sort the document into the appropriate list
+        if str(document.id) in existing['ids']:
+            to_update_ids.append(str(document.id))
+            to_update_contents.append(document.content)
+            to_update_metadata.append(document.metadata)
+        else:
+            to_add_ids.append(str(document.id))
+            to_add_contents.append(document.content)
+            to_add_metadata.append(document.metadata)
+        
+        # Perform updates if needed
+        if to_update_ids:
             collection.update(
-                ids=[document.id],
-                documents=[document.content],
-                metadatas=[document.metadata]
+                ids=to_update_ids,
+                documents=to_update_contents,
+                metadatas=to_update_metadata
             )
-            logger.info(f"Document updated: {document.id}")
-            return {"message": "Document updated successfully"}
+            logger.info(f"Documents updated: {to_update_ids}")
         
-        # Document doesn't exist - add
-        collection.add(
-            documents=[document.content],
-            metadatas=[document.metadata],
-            ids=[document.id]
-        )
-        logger.info(f"Document added: {document.id}")
-        return {"message": "Document added successfully"}
+        # Perform adds if needed
+        if to_add_ids:
+            collection.add(
+                ids=to_add_ids,
+                documents=to_add_contents,
+                metadatas=to_add_metadata
+            )
+            logger.info(f"Documents added: {to_add_ids}")
+        
+        return {
+            "message": f"Updated {len(to_update_ids)} documents, Added {len(to_add_ids)} documents",
+            "updated_ids": to_update_ids,
+            "added_ids": to_add_ids
+        }
             
     except Exception as e:
         logger.error(f"Error adding/updating document: {e}", exc_info=True)
