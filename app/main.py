@@ -191,35 +191,48 @@ async def update_documents(documents: List[Document], collection_name: str):
     try:
         collection = get_or_create_collection(collection_name)
         
-        # Get all existing IDs in the collection
-        existing_docs = collection.get()
-        existing_ids = set(existing_docs['ids']) if existing_docs else set()
+        # Split documents into batches of 20 to avoid overloading
+        batch_size = 20
+        to_update_ids = []
+        to_update_texts = []
+        to_update_metadata = []
+        skipped_ids = []
         
-        # Filter documents to only include those that exist
-        docs_to_update = [doc for doc in documents if str(doc.id) in existing_ids]
-        
-        if not docs_to_update:
-            return {"message": "No valid documents to update"}
+        for i in range(0, len(documents), batch_size):
+            batch = documents[i:i + batch_size]
+            batch_ids = [str(doc.id) for doc in batch]
             
-        # Prepare batch update data
-        ids = [str(doc.id) for doc in docs_to_update]
-        texts = [doc.content for doc in docs_to_update]
-        metadatas = [doc.metadata for doc in docs_to_update]
+            # Check existence for each batch
+            existing = collection.get(
+                ids=batch_ids,
+                include=["metadatas"]
+            )
+            
+            existing_ids = set(existing['ids'])
+            
+            # Process each document in the batch
+            for doc in batch:
+                if str(doc.id) in existing_ids:
+                    to_update_ids.append(str(doc.id))
+                    to_update_texts.append(doc.content)
+                    to_update_metadata.append(doc.metadata)
+                else:
+                    skipped_ids.append(str(doc.id))
         
-        # Perform batch update
-        collection.update(
-            ids=ids,
-            documents=texts,
-            metadatas=metadatas
-        )
-        
-        logger.info(f"Updated {len(docs_to_update)} documents")
+        if to_update_ids:
+            # Perform batch update only for existing documents
+            collection.update(
+                ids=to_update_ids,
+                documents=to_update_texts,
+                metadatas=to_update_metadata
+            )
+            logger.info(f"Updated {len(to_update_ids)} documents")
+            
         return {
-            "message": f"Updated {len(docs_to_update)} documents",
-            "updated_ids": ids,
-            "skipped_ids": [str(doc.id) for doc in documents if str(doc.id) not in existing_ids]
+            "message": f"Updated {len(to_update_ids)} documents",
+            "updated_ids": to_update_ids,
+            "skipped_ids": skipped_ids
         }
-
     except Exception as e:
         logger.error(f"Error updating documents: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update documents")
