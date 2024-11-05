@@ -215,43 +215,45 @@ async def update_documents(documents: List[Document], collection_name: str):
     try:
         collection = get_or_create_collection(collection_name)
         
-        # Split documents into batches of 20 to avoid overloading
-        batch_size = 20
+        # Get all document IDs first
+        all_doc_ids = [str(doc.id) for doc in documents]
+        
+        # Check existence for all documents at once
+        existing = collection.get(
+            ids=all_doc_ids,
+            include=["metadatas"]
+        )
+        
+        existing_ids = set(existing['ids'])
+        
+        # Prepare update lists
         to_update_ids = []
         to_update_texts = []
         to_update_metadata = []
         skipped_ids = []
         
-        for i in range(0, len(documents), batch_size):
-            batch = documents[i:i + batch_size]
-            batch_ids = [str(doc.id) for doc in batch]
-            
-            # Check existence for each batch
-            existing = collection.get(
-                ids=batch_ids,
-                include=["metadatas"]
-            )
-            
-            existing_ids = set(existing['ids'])
-            
-            # Process each document in the batch
-            for doc in batch:
-                if str(doc.id) in existing_ids:
-                    to_update_ids.append(str(doc.id))
-                    to_update_texts.append(doc.content)
-                    to_update_metadata.append(doc.metadata)
-                else:
-                    skipped_ids.append(str(doc.id))
+        # Sort documents into update and skip lists
+        for doc in documents:
+            doc_id = str(doc.id)
+            if doc_id in existing_ids:
+                to_update_ids.append(doc_id)
+                to_update_texts.append(doc.content)
+                to_update_metadata.append(doc.metadata)
+            else:
+                skipped_ids.append(doc_id)
+                logger.warning(f"Document {doc_id} not found - skipping update")
         
-        if to_update_ids:
-            # Perform batch update only for existing documents
+        # Perform updates in batches of 20
+        batch_size = 20
+        for i in range(0, len(to_update_ids), batch_size):
+            batch_end = i + batch_size
             collection.update(
-                ids=to_update_ids,
-                documents=to_update_texts,
-                metadatas=to_update_metadata
+                ids=to_update_ids[i:batch_end],
+                documents=to_update_texts[i:batch_end],
+                metadatas=to_update_metadata[i:batch_end]
             )
-            logger.info(f"Updated {len(to_update_ids)} documents")
-            
+            logger.info(f"Updated batch of {len(to_update_ids[i:batch_end])} documents")
+        
         return {
             "message": f"Updated {len(to_update_ids)} documents",
             "updated_ids": to_update_ids,
