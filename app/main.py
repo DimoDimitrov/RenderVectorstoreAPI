@@ -261,6 +261,53 @@ async def update_documents(documents: List[Document], collection_name: str):
         logger.error(f"Error updating documents: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update documents")
 
+@app.get("/collection_info")
+async def get_collection_info(collection_name: str):
+    try:
+        collection = get_or_create_collection(collection_name)
+        metadata = collection.metadata
+        return {
+            "metadata": metadata,
+            "count": collection.count()
+        }
+    except Exception as e:
+        logger.error(f"Error getting collection info: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/recreate_collection")
+async def recreate_collection(collection_name: str):
+    try:
+        client = get_chroma_client(collection_name)
+        
+        # Get all existing documents
+        old_collection = client.get_collection(name=collection_name)
+        existing_docs = old_collection.get()
+        
+        # Delete the old collection
+        client.delete_collection(collection_name)
+        
+        # Create new collection with correct HNSW settings
+        new_collection = client.create_collection(
+            name=collection_name,
+            metadata=HNSW_SETTINGS
+        )
+        
+        # Re-add all documents if there were any
+        if existing_docs and existing_docs['ids']:
+            new_collection.add(
+                ids=existing_docs['ids'],
+                documents=existing_docs['documents'],
+                metadatas=existing_docs['metadatas']
+            )
+        
+        return {
+            "message": "Collection recreated successfully",
+            "documents_migrated": len(existing_docs['ids']) if existing_docs else 0
+        }
+    except Exception as e:
+        logger.error(f"Error recreating collection: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 # if __name__ == "__main__":
 #     # Used for running the server locally. Usefull for debugging.
 #     import uvicorn
