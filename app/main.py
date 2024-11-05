@@ -277,6 +277,10 @@ async def get_collection_info(collection_name: str):
 @app.post("/recreate_collection")
 async def recreate_collection(collection_name: str):
     try:
+        # Clear the caches before recreating
+        get_chroma_client.cache_clear()
+        get_or_create_collection.cache_clear()
+        
         client = get_chroma_client(collection_name)
         
         # Get all existing documents
