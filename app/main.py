@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import chromadb
 from chromadb.errors import InvalidCollectionException
 import os
-from typing import List
+from typing import List, Union
 import logging
 from functools import lru_cache
 
@@ -103,15 +103,23 @@ def create_persist_directory(collection_name: str) -> dict:
         raise HTTPException(status_code=500, detail=f"Failed to create persist directory: {str(e)}")
 
 @app.post("/add_document")
-async def add_document(document: Document, collection_name: str):
+async def add_document(document: Union[Document, List[Document]], collection_name: str):
     try:
         collection = get_or_create_collection(collection_name)
         
-        # Check if document exists
+        # Convert single document to list if needed
+        documents = [document] if isinstance(document, Document) else document
+        
+        # Get all document IDs first
+        all_doc_ids = [str(doc.id) for doc in documents]
+        
+        # Check existence for all documents at once
         existing = collection.get(
-            ids=[str(document.id)],
+            ids=all_doc_ids,
             include=["metadatas"]
         )
+        
+        existing_ids = set(existing['ids'])
         
         # Split into documents to update and add
         to_update_ids = []
@@ -122,33 +130,41 @@ async def add_document(document: Document, collection_name: str):
         to_add_contents = []
         to_add_metadata = []
         
-        # Sort the document into the appropriate list
-        if str(document.id) in existing['ids']:
-            to_update_ids.append(str(document.id))
-            to_update_contents.append(document.content)
-            to_update_metadata.append(document.metadata)
-        else:
-            to_add_ids.append(str(document.id))
-            to_add_contents.append(document.content)
-            to_add_metadata.append(document.metadata)
+        # Sort documents into appropriate lists
+        for doc in documents:
+            doc_id = str(doc.id)
+            if doc_id in existing_ids:
+                to_update_ids.append(doc_id)
+                to_update_contents.append(doc.content)
+                to_update_metadata.append(doc.metadata)
+            else:
+                to_add_ids.append(doc_id)
+                to_add_contents.append(doc.content)
+                to_add_metadata.append(doc.metadata)
         
-        # Perform updates if needed
+        # Perform updates in batches if needed
         if to_update_ids:
-            collection.update(
-                ids=to_update_ids,
-                documents=to_update_contents,
-                metadatas=to_update_metadata
-            )
-            logger.info(f"Documents updated: {to_update_ids}")
+            batch_size = 20
+            for i in range(0, len(to_update_ids), batch_size):
+                batch_end = i + batch_size
+                collection.update(
+                    ids=to_update_ids[i:batch_end],
+                    documents=to_update_contents[i:batch_end],
+                    metadatas=to_update_metadata[i:batch_end]
+                )
+            logger.info(f"Updated {len(to_update_ids)} documents in batch")
         
-        # Perform adds if needed
+        # Perform adds in batches if needed
         if to_add_ids:
-            collection.add(
-                ids=to_add_ids,
-                documents=to_add_contents,
-                metadatas=to_add_metadata
-            )
-            logger.info(f"Documents added: {to_add_ids}")
+            batch_size = 20
+            for i in range(0, len(to_add_ids), batch_size):
+                batch_end = i + batch_size
+                collection.add(
+                    ids=to_add_ids[i:batch_end],
+                    documents=to_add_contents[i:batch_end],
+                    metadatas=to_add_metadata[i:batch_end]
+                )
+            logger.info(f"Added {len(to_add_ids)} documents in batch")
         
         return {
             "message": f"Updated {len(to_update_ids)} documents, Added {len(to_add_ids)} documents",
@@ -157,8 +173,8 @@ async def add_document(document: Document, collection_name: str):
         }
             
     except Exception as e:
-        logger.error(f"Error adding/updating document: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to add/update document: {str(e)}")
+        logger.error(f"Error adding/updating documents: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to add/update documents: {str(e)}")
 
 @app.get("/query")
 async def query(query_text: str, collection_name: str, n_results: int = 5):
@@ -252,7 +268,7 @@ async def update_documents(documents: List[Document], collection_name: str):
                 documents=to_update_texts[i:batch_end],
                 metadatas=to_update_metadata[i:batch_end]
             )
-            logger.info(f"Updated batch of {len(to_update_ids[i:batch_end])} documents")
+            logger.info(f"Updated the following documents: {to_update_ids[i:batch_end]} ")
         
         return {
             "message": f"Updated {len(to_update_ids)} documents",
