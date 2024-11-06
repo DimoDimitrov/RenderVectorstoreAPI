@@ -177,16 +177,37 @@ async def add_document(document: Union[Document, List[Document]], collection_nam
         raise HTTPException(status_code=500, detail=f"Failed to add/update documents: {str(e)}")
 
 @app.get("/query")
-async def query(query_text: str, collection_name: str, n_results: int = 5):
+async def query(
+    query_text: str, 
+    collection_name: str, 
+    n_results: int = 5,
+    offset: int = 0  # Add offset parameter
+):
     try:
         collection = get_or_create_collection(collection_name)
+        
+        # Get total count for pagination info
+        total_count = collection.count()
+        
         results = collection.query(
             query_texts=[query_text],
             n_results=n_results,
+            offset=offset,  # Add offset to query
             include=["metadatas", "documents", "distances"]
         )
-        logger.info(f"Query successful: {query_text}")
-        return results
+        
+        # Add pagination metadata to response
+        response = {
+            **results,
+            "pagination": {
+                "offset": offset,
+                "limit": n_results,
+                "total": total_count
+            }
+        }
+        
+        logger.info(f"Query successful: {query_text} (offset: {offset}, limit: {n_results})")
+        return response
     except Exception as e:
         logger.error(f"Error querying: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to query: {str(e)}")
