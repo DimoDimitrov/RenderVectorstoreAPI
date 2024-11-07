@@ -181,22 +181,27 @@ async def query(
     query_text: str, 
     collection_name: str, 
     n_results: int = 5,
-    offset: int = 0  # Add offset parameter
+    offset: int = 0
 ):
     try:
         collection = get_or_create_collection(collection_name)
-        
-        # Get total count for pagination info
         total_count = collection.count()
         
-        results = collection.query(
-            query_texts=[query_text],
-            n_results=n_results,
-            offset=offset,  # Add offset to query
-            include=["metadatas", "documents", "distances"]
-        )
+        if query_text.strip():
+            # If there's a query text, use query method for similarity search
+            results = collection.query(
+                query_texts=[query_text],
+                n_results=n_results,
+                include=["metadatas", "documents", "distances"]
+            )
+        else:
+            # If no query text, use get method for paginated document retrieval
+            results = collection.get(
+                limit=n_results,
+                offset=offset,
+                include=["metadatas", "documents"]
+            )
         
-        # Add pagination metadata to response
         response = {
             **results,
             "pagination": {
