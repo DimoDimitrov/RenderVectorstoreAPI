@@ -356,6 +356,40 @@ async def recreate_collection(collection_name: str):
         logger.error(f"Error recreating collection: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.delete("/delete_collection/{collection_name}")
+async def delete_collection(collection_name: str):
+    try:
+        # Clear the caches before deletion
+        get_chroma_client.cache_clear()
+        get_or_create_collection.cache_clear()
+        
+        client = get_chroma_client(collection_name)
+        
+        try:
+            # Delete the collection
+            client.delete_collection(collection_name)
+            logger.info(f"Collection {collection_name} deleted successfully")
+            
+            # Verify the collection is deleted by trying to get it
+            try:
+                client.get_collection(name=collection_name)
+                # If we get here, the collection still exists
+                logger.error(f"Collection {collection_name} still exists after deletion")
+                raise HTTPException(status_code=500, detail="Failed to delete collection")
+            except InvalidCollectionException:
+                # This is what we want - collection should not exist
+                logger.info(f"Verified collection {collection_name} is deleted")
+            
+            return {"message": f"Collection {collection_name} deleted successfully"}
+            
+        except InvalidCollectionException:
+            logger.warning(f"Collection {collection_name} does not exist")
+            return {"message": "Collection does not exist"}
+            
+    except Exception as e:
+        logger.error(f"Error deleting collection: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to delete collection: {str(e)}")
+
 # if __name__ == "__main__":
 #     # Used for running the server locally. Usefull for debugging.
 #     import uvicorn
