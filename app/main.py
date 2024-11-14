@@ -226,6 +226,7 @@ async def mmr_query(
     lambda_mult: float = 0.5,
     offset: int = 0
 ):
+    print(f"Recieved parameters for the query: {query_text}, {collection_name}, {k}, {fetch_k}, {lambda_mult}, {offset}")
     try:
         collection = get_or_create_collection(collection_name)
         total_count = collection.count()
