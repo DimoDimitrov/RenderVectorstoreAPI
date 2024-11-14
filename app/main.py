@@ -264,6 +264,9 @@ async def mmr_query(
         
     except Exception as e:
         logger.error(f"Error in MMR query: {e}", exc_info=True)
+        # Add this debug information
+        logger.info(f"ChromaDB version: {chromadb.__version__}")
+        logger.info(f"Available query parameters: {collection.query.__code__.co_varnames}")
         raise HTTPException(status_code=500, detail=f"Failed to execute MMR query: {str(e)}")
 
 @app.delete("/delete_documents")
