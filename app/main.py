@@ -239,14 +239,14 @@ async def mmr_query(
                 include=["metadatas", "documents"]
             )
         else:
-            # Configure MMR through where parameter
+            # Try MMR configuration with proper operator syntax
             where = {
-                "$mmr": {
-                    "enabled": True,
-                    "k": k,
-                    "lambda": lambda_mult,
-                    "fetch_k": fetch_k
-                }
+                "$and": [
+                    {"$mmr": True},
+                    {"$mmr_k": k},
+                    {"$mmr_lambda": lambda_mult},
+                    {"$mmr_fetch_k": fetch_k}
+                ]
             }
             
             results = collection.query(
