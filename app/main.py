@@ -311,12 +311,17 @@ async def get_collection_info(collection_name: str):
         collection = get_or_create_collection(collection_name)
         metadata = collection.metadata
         return {
+            "found": True,
             "metadata": metadata,
             "count": collection.count()
         }
     except Exception as e:
         logger.error(f"Error getting collection info: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "found": False,
+            "metadata": "",
+            "count": ""
+        }
 
 @app.post("/recreate_collection")
 async def recreate_collection(collection_name: str):
