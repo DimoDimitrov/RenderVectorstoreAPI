@@ -404,6 +404,7 @@ async def mmr_query(
     lambda_mult: float = 0.5,
     offset: int = 0
 ):
+    print(f"ChromaDB version: {chromadb.__version__}")
     try:
         collection = get_or_create_collection(collection_name)
         total_count = collection.count()
