@@ -183,6 +183,7 @@ async def query(
     n_results: int = 5,
     offset: int = 0
 ):
+    print(f"ChromaDB version: {chromadb.__version__}")
     try:
         collection = get_or_create_collection(collection_name)
         total_count = collection.count()
@@ -216,6 +217,62 @@ async def query(
     except Exception as e:
         logger.error(f"Error querying: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to query: {str(e)}")
+
+@app.get("/mmr_query")
+async def mmr_query(
+    query_text: str, 
+    collection_name: str, 
+    k: int = 5,
+    fetch_k: int = 20,
+    lambda_mult: float = 0.5,
+    offset: int = 0
+):
+    try:
+        collection = get_or_create_collection(collection_name)
+        total_count = collection.count()
+        
+        if not query_text.strip():
+            # If no query text, use regular get method for pagination
+            results = collection.get(
+                limit=k,
+                offset=offset,
+                include=["metadatas", "documents"]
+            )
+        else:
+            try:
+                # Try with MMR parameters first
+                results = collection.query(
+                    query_texts=[query_text],
+                    n_results=k,
+                    include=["metadatas", "documents", "distances"],
+                    mmr=True,
+                    mmr_lambda=lambda_mult,
+                    fetch_k=fetch_k
+                )
+            except TypeError:
+                # Fallback to standard query if MMR is not supported
+                logger.warning("MMR not supported in current ChromaDB version, falling back to standard query")
+                results = collection.query(
+                    query_texts=[query_text],
+                    n_results=k,
+                    include=["metadatas", "documents", "distances"]
+                )
+        
+        response = {
+            **results,
+            "pagination": {
+                "offset": offset,
+                "limit": k,
+                "total": total_count
+            }
+        }
+        
+        logger.info(f"MMR Query successful: {query_text} (k: {k}, fetch_k: {fetch_k}, lambda: {lambda_mult})")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in MMR query: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to execute MMR query: {str(e)}")
 
 @app.delete("/delete_documents")
 async def delete_documents(document_ids: List[str], collection_name: str):
@@ -394,63 +451,6 @@ async def delete_collection(collection_name: str):
     except Exception as e:
         logger.error(f"Error deleting collection: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to delete collection: {str(e)}")
-
-@app.get("/mmr_query")
-async def mmr_query(
-    query_text: str, 
-    collection_name: str, 
-    k: int = 5,
-    fetch_k: int = 20,
-    lambda_mult: float = 0.5,
-    offset: int = 0
-):
-    print(f"ChromaDB version: {chromadb.__version__}")
-    try:
-        collection = get_or_create_collection(collection_name)
-        total_count = collection.count()
-        
-        if not query_text.strip():
-            # If no query text, use regular get method for pagination
-            results = collection.get(
-                limit=k,
-                offset=offset,
-                include=["metadatas", "documents"]
-            )
-        else:
-            try:
-                # Try with MMR parameters first
-                results = collection.query(
-                    query_texts=[query_text],
-                    n_results=k,
-                    include=["metadatas", "documents", "distances"],
-                    mmr=True,
-                    mmr_lambda=lambda_mult,
-                    fetch_k=fetch_k
-                )
-            except TypeError:
-                # Fallback to standard query if MMR is not supported
-                logger.warning("MMR not supported in current ChromaDB version, falling back to standard query")
-                results = collection.query(
-                    query_texts=[query_text],
-                    n_results=k,
-                    include=["metadatas", "documents", "distances"]
-                )
-        
-        response = {
-            **results,
-            "pagination": {
-                "offset": offset,
-                "limit": k,
-                "total": total_count
-            }
-        }
-        
-        logger.info(f"MMR Query successful: {query_text} (k: {k}, fetch_k: {fetch_k}, lambda: {lambda_mult})")
-        return response
-        
-    except Exception as e:
-        logger.error(f"Error in MMR query: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to execute MMR query: {str(e)}")
 
 # if __name__ == "__main__":
 #     # Used for running the server locally. Usefull for debugging.
