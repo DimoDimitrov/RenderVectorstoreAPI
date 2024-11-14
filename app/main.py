@@ -238,16 +238,19 @@ async def mmr_query(
                 include=["metadatas", "documents"]
             )
         else:
-            # Try with direct parameters
+            # Pass MMR parameters through query_request
+            query_request = {
+                "mmr": True,
+                "mmr_k": k,
+                "mmr_lambda": lambda_mult,
+                "mmr_fetch_k": fetch_k
+            }
+            
             results = collection.query(
                 query_texts=[query_text],
                 n_results=k,
                 include=["metadatas", "documents", "distances"],
-                where=None,
-                where_document=None,
-                mmr_k=k,
-                mmr_lambda=lambda_mult,
-                mmr_fetch_k=fetch_k
+                query_request=query_request
             )
         
         response = {
@@ -264,9 +267,7 @@ async def mmr_query(
         
     except Exception as e:
         logger.error(f"Error in MMR query: {e}", exc_info=True)
-        # Add this debug information
-        logger.info(f"ChromaDB version: {chromadb.__version__}")
-        logger.info(f"Available query parameters: {collection.query.__code__.co_varnames}")
+        logger.info(f"Query request used: {query_request}")  # Debug info
         raise HTTPException(status_code=500, detail=f"Failed to execute MMR query: {str(e)}")
 
 @app.delete("/delete_documents")
