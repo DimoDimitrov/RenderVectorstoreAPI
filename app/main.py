@@ -416,17 +416,24 @@ async def mmr_query(
                 include=["metadatas", "documents"]
             )
         else:
-            # Use MMR query for diversity-aware search
-            results = collection.query(
-                query_texts=[query_text],
-                n_results=k,
-                where=None,
-                where_document=None,
-                include=["metadatas", "documents", "distances"],
-                mmr=True,
-                mmr_lambda=lambda_mult,
-                fetch_k=fetch_k
-            )
+            try:
+                # Try with MMR parameters first
+                results = collection.query(
+                    query_texts=[query_text],
+                    n_results=k,
+                    include=["metadatas", "documents", "distances"],
+                    mmr=True,
+                    mmr_lambda=lambda_mult,
+                    fetch_k=fetch_k
+                )
+            except TypeError:
+                # Fallback to standard query if MMR is not supported
+                logger.warning("MMR not supported in current ChromaDB version, falling back to standard query")
+                results = collection.query(
+                    query_texts=[query_text],
+                    n_results=k,
+                    include=["metadatas", "documents", "distances"]
+                )
         
         response = {
             **results,
