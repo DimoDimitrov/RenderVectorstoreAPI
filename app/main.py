@@ -183,7 +183,6 @@ async def query(
     n_results: int = 5,
     offset: int = 0
 ):
-    print(f"ChromaDB version: {chromadb.__version__}")
     try:
         collection = get_or_create_collection(collection_name)
         total_count = collection.count()
@@ -239,24 +238,18 @@ async def mmr_query(
                 include=["metadatas", "documents"]
             )
         else:
-            try:
-                # Try with MMR parameters first
-                results = collection.query(
-                    query_texts=[query_text],
-                    n_results=k,
-                    include=["metadatas", "documents", "distances"],
-                    mmr=True,
-                    mmr_lambda=lambda_mult,
-                    fetch_k=fetch_k
-                )
-            except TypeError:
-                # Fallback to standard query if MMR is not supported
-                logger.warning("MMR not supported in current ChromaDB version, falling back to standard query")
-                results = collection.query(
-                    query_texts=[query_text],
-                    n_results=k,
-                    include=["metadatas", "documents", "distances"]
-                )
+            # According to ChromaDB 0.5.18 documentation
+            results = collection.query(
+                query_texts=[query_text],
+                n_results=k,
+                include=["metadatas", "documents", "distances"],
+                # New parameters for MMR in 0.5.18
+                query_options={
+                    "mmr": True,
+                    "mmr_lambda": lambda_mult,
+                    "fetch_k": fetch_k
+                }
+            )
         
         response = {
             **results,
