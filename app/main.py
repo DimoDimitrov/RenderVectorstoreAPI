@@ -238,17 +238,16 @@ async def mmr_query(
                 include=["metadatas", "documents"]
             )
         else:
-            # According to ChromaDB 0.5.18 documentation
+            # Try with direct parameters
             results = collection.query(
                 query_texts=[query_text],
                 n_results=k,
                 include=["metadatas", "documents", "distances"],
-                # New parameters for MMR in 0.5.18
-                query_options={
-                    "mmr": True,
-                    "mmr_lambda": lambda_mult,
-                    "fetch_k": fetch_k
-                }
+                where=None,
+                where_document=None,
+                mmr_k=k,
+                mmr_lambda=lambda_mult,
+                mmr_fetch_k=fetch_k
             )
         
         response = {
