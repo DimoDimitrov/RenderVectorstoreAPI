@@ -239,19 +239,21 @@ async def mmr_query(
                 include=["metadatas", "documents"]
             )
         else:
-            # Configure MMR parameters in query_results
-            query_results = {
-                "mmr": True,
-                "mmr_k": k,
-                "mmr_lambda": lambda_mult,
-                "mmr_fetch_k": fetch_k
+            # Configure MMR through where parameter
+            where = {
+                "$mmr": {
+                    "enabled": True,
+                    "k": k,
+                    "lambda": lambda_mult,
+                    "fetch_k": fetch_k
+                }
             }
             
             results = collection.query(
                 query_texts=[query_text],
                 n_results=k,
-                include=["metadatas", "documents", "distances"],
-                query_results=query_results
+                where=where,
+                include=["metadatas", "documents", "distances"]
             )
         
         response = {
@@ -268,9 +270,7 @@ async def mmr_query(
         
     except Exception as e:
         logger.error(f"Error in MMR query: {e}", exc_info=True)
-        logger.info(f"Query results config used: {query_results}")  # Debug info
-        logger.info(f"Available methods on collection: {dir(collection)}")
-        logger.info(f"Query method signature: {str(collection.query.__doc__)}")
+        logger.info(f"Where configuration used: {where}")  # Debug info
         raise HTTPException(status_code=500, detail=f"Failed to execute MMR query: {str(e)}")
 
 @app.delete("/delete_documents")
