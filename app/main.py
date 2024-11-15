@@ -226,36 +226,88 @@ async def mmr_query(
     lambda_mult: float = 0.5,
     offset: int = 0
 ):
-    print(f"Recieved parameters for the query: {query_text}, {collection_name}, {k}, {fetch_k}, {lambda_mult}, {offset}")
     try:
         collection = get_or_create_collection(collection_name)
         total_count = collection.count()
         
         if not query_text.strip():
-            # If no query text, use regular get method for pagination
             results = collection.get(
                 limit=k,
                 offset=offset,
-                include=["metadatas", "documents"]
+                include=["metadatas", "documents", "embeddings"]
             )
         else:
-            # Try MMR configuration with proper operator syntax
-            where = {
-                "$and": [
-                    {"$mmr": True},
-                    {"$mmr_k": k},
-                    {"$mmr_lambda": lambda_mult},
-                    {"$mmr_fetch_k": fetch_k}
-                ]
-            }
-            
-            results = collection.query(
+            # Get initial larger set of results
+            initial_results = collection.query(
                 query_texts=[query_text],
-                n_results=k,
-                where=where,
-                include=["metadatas", "documents", "distances"]
+                n_results=fetch_k,
+                include=["metadatas", "documents", "distances", "embeddings"]
             )
-        
+            
+            if not initial_results['ids'] or len(initial_results['ids'][0]) == 0:
+                logger.warning(f"No results found for query: {query_text}")
+                return {
+                    "ids": [[]],
+                    "documents": [[]],
+                    "metadatas": [[]],
+                    "distances": [[]],
+                    "pagination": {"offset": offset, "limit": k, "total": total_count}
+                }
+
+            # Extract data from initial results
+            docs = initial_results['documents'][0]
+            distances = initial_results['distances'][0]
+            metadatas = initial_results['metadatas'][0]
+            ids = initial_results['ids'][0]
+            embeddings = initial_results['embeddings'][0]
+
+            # Implement MMR selection
+            selected_indices = []
+            remaining_indices = list(range(len(docs)))
+            
+            # Get query embedding
+            query_results = collection.query(
+                query_texts=[query_text],
+                n_results=1,
+                include=["embeddings"]
+            )
+            query_embedding = query_results['embeddings'][0]
+
+            while len(selected_indices) < k and remaining_indices:
+                # Calculate MMR scores
+                mmr_scores = []
+                for idx in remaining_indices:
+                    if not selected_indices:
+                        # First selection - only consider similarity to query
+                        mmr_score = -distances[idx]  # Negative because distances are dissimilarity
+                    else:
+                        # Calculate similarity to query
+                        query_similarity = -distances[idx]
+                        
+                        # Calculate maximum similarity to selected documents
+                        max_doc_similarity = max(
+                            cosine_similarity(embeddings[idx], embeddings[sel_idx])
+                            for sel_idx in selected_indices
+                        )
+                        
+                        # MMR score calculation
+                        mmr_score = lambda_mult * query_similarity - (1 - lambda_mult) * max_doc_similarity
+
+                    mmr_scores.append((idx, mmr_score))
+                
+                # Select document with highest MMR score
+                selected_idx = max(mmr_scores, key=lambda x: x[1])[0]
+                selected_indices.append(selected_idx)
+                remaining_indices.remove(selected_idx)
+
+            # Reorder results based on MMR selection
+            results = {
+                "ids": [[ids[i] for i in selected_indices]],
+                "documents": [[docs[i] for i in selected_indices]],
+                "metadatas": [[metadatas[i] for i in selected_indices]],
+                "distances": [[distances[i] for i in selected_indices]]
+            }
+
         response = {
             **results,
             "pagination": {
@@ -270,8 +322,14 @@ async def mmr_query(
         
     except Exception as e:
         logger.error(f"Error in MMR query: {e}", exc_info=True)
-        logger.info(f"Where configuration used: {where}")  # Debug info
         raise HTTPException(status_code=500, detail=f"Failed to execute MMR query: {str(e)}")
+
+def cosine_similarity(a, b):
+    """Calculate cosine similarity between two vectors."""
+    dot_product = sum(x * y for x, y in zip(a, b))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(x * x for x in b) ** 0.5
+    return dot_product / (norm_a * norm_b) if norm_a and norm_b else 0
 
 @app.delete("/delete_documents")
 async def delete_documents(document_ids: List[str], collection_name: str):
