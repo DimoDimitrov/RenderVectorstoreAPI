@@ -485,21 +485,32 @@ async def delete_collection(collection_name: str):
         client = get_chroma_client(collection_name)
         
         try:
+            # Get the collection
+            collection = client.get_collection(name=collection_name)
+            
+            # Get all document IDs
+            all_docs = collection.get()
+            if all_docs and all_docs['ids']:
+                # Delete all documents first
+                collection.delete(ids=all_docs['ids'])
+                logger.info(f"Deleted {len(all_docs['ids'])} documents from collection {collection_name}")
+            
             # Delete the collection
             client.delete_collection(collection_name)
             logger.info(f"Collection {collection_name} deleted successfully")
             
-            # Verify the collection is deleted by trying to get it
+            # Verify the collection is deleted
             try:
                 client.get_collection(name=collection_name)
-                # If we get here, the collection still exists
                 logger.error(f"Collection {collection_name} still exists after deletion")
                 raise HTTPException(status_code=500, detail="Failed to delete collection")
             except InvalidCollectionException:
-                # This is what we want - collection should not exist
                 logger.info(f"Verified collection {collection_name} is deleted")
             
-            return {"message": f"Collection {collection_name} deleted successfully"}
+            return {
+                "message": f"Collection {collection_name} deleted successfully",
+                "documents_deleted": len(all_docs['ids']) if all_docs else 0
+            }
             
         except InvalidCollectionException:
             logger.warning(f"Collection {collection_name} does not exist")
