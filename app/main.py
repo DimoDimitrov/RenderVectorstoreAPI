@@ -29,6 +29,7 @@ app.add_api_route("/check_agent", check_agent, methods=["POST"])
 app.add_api_route("/delete_agent/{agent_id}", delete_agent, methods=["DELETE"])
 
 PERSIST_DIRECTORY = os.environ.get("PERSIST_DIRECTORY", "/data/vectorstore")
+BATCH_SIZE = os.environ.get("BATCH_SIZE", 20)
 
 @lru_cache(maxsize=None)
 def get_chroma_client(collection_name: str):
@@ -90,6 +91,9 @@ class Document(BaseModel):
     content: str
     metadata: dict
 
+
+# Since the function below is only performing file system operations (creating directories)
+#  and not doing any I/O operations that would benefit from asynchronous execution, it does not need to be async.
 @app.post("/create_persist_directory")
 def create_persist_directory(collection_name: str) -> dict:
     try:
@@ -144,9 +148,9 @@ async def add_document(document: Union[Document, List[Document]], collection_nam
         
         # Perform updates in batches if needed
         if to_update_ids:
-            batch_size = 20
-            for i in range(0, len(to_update_ids), batch_size):
-                batch_end = i + batch_size
+            BATCH_SIZE = 20
+            for i in range(0, len(to_update_ids), BATCH_SIZE):
+                batch_end = i + BATCH_SIZE
                 collection.update(
                     ids=to_update_ids[i:batch_end],
                     documents=to_update_contents[i:batch_end],
@@ -156,9 +160,9 @@ async def add_document(document: Union[Document, List[Document]], collection_nam
         
         # Perform adds in batches if needed
         if to_add_ids:
-            batch_size = 20
-            for i in range(0, len(to_add_ids), batch_size):
-                batch_end = i + batch_size
+            BATCH_SIZE = 20
+            for i in range(0, len(to_add_ids), BATCH_SIZE):
+                batch_end = i + BATCH_SIZE
                 collection.add(
                     ids=to_add_ids[i:batch_end],
                     documents=to_add_contents[i:batch_end],
@@ -400,9 +404,9 @@ async def update_documents(documents: List[Document], collection_name: str):
                 logger.warning(f"Document {doc_id} not found - skipping update")
         
         # Perform updates in batches of 20
-        batch_size = 20
-        for i in range(0, len(to_update_ids), batch_size):
-            batch_end = i + batch_size
+        BATCH_SIZE = 20
+        for i in range(0, len(to_update_ids), BATCH_SIZE):
+            batch_end = i + BATCH_SIZE
             collection.update(
                 ids=to_update_ids[i:batch_end],
                 documents=to_update_texts[i:batch_end],
