@@ -29,7 +29,7 @@ app.add_api_route("/check_agent", check_agent, methods=["POST"])
 app.add_api_route("/delete_agent/{agent_id}", delete_agent, methods=["DELETE"])
 
 PERSIST_DIRECTORY = os.environ.get("PERSIST_DIRECTORY", "/data/vectorstore")
-BATCH_SIZE = os.environ.get("BATCH_SIZE", 20)
+BATCH_SIZE = int(os.environ.get("BATCH_SIZE", 20))
 
 @lru_cache(maxsize=None)
 def get_chroma_client(collection_name: str):
