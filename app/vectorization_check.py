@@ -50,23 +50,8 @@ class AgentCheck:
                 )))
                 should_update = last_update_time < current_day_start
             elif config.update_type == "weekly":
-                # Check if we're in the configured time window and haven't updated this week
-                if (current_struct.tm_wday == config.day and
-                    current_struct.tm_hour == config.hour and 
-                    current_struct.tm_min >= config.minute):
-                    # Calculate the start of the current time window
-                    window_start = time.mktime(time.struct_time((
-                        current_struct.tm_year,
-                        current_struct.tm_mon,
-                        current_struct.tm_mday,
-                        config.hour,
-                        config.minute,
-                        0,
-                        current_struct.tm_wday,
-                        current_struct.tm_yday,
-                        current_struct.tm_isdst
-                    )))
-                    should_update = last_update_time < window_start
+                # Only check if we've already updated this week on the specified day
+                should_update = last_update_struct.tm_wday != config.day
 
             if should_update:
                 # Double-check that another instance hasn't updated while we were checking
