@@ -21,9 +21,7 @@ class AgentCheck:
         self._lock = threading.RLock()
 
     def check_and_register_agent(self, agent_id: str, config: AgentConfig) -> Dict[str, bool]:
-        # Ensure we acquire the lock before ANY operations
         with self._lock:
-            # Log FIRST thing after acquiring lock
             logger.info(f"Lock acquired - Agent {agent_id} - {config.update_type} check:")
             
             current_time = time.time()
@@ -32,10 +30,16 @@ class AgentCheck:
             # Get the current state before any modifications
             last_update_time = self.agents.get(agent_id)
             
+            # For new agents, we need to check again after getting the lock
+            # to ensure another instance hasn't registered it
             if last_update_time is None:
-                logger.info(f"New agent {agent_id} - registering")
-                self.agents[agent_id] = current_time
-                return {"should_update": True}
+                # Double check if another instance registered while we were waiting
+                if agent_id in self.agents:
+                    last_update_time = self.agents[agent_id]
+                else:
+                    logger.info(f"New agent {agent_id} - registering")
+                    self.agents[agent_id] = current_time
+                    return {"should_update": True}
                 
             last_update_struct = time.localtime(last_update_time)
             should_update = False
