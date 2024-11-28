@@ -51,20 +51,33 @@ class AgentCheck:
                 should_update = last_update_time < current_day_start
             elif config.update_type == "weekly":
                 # Debug the values
-                logger.debug(f"Current wday: {current_struct.tm_wday}, Config day: {config.day}, "
-                           f"Last update wday: {last_update_struct.tm_wday}")
+                logger.info(f"Agent {agent_id} - Weekly check:")
+                logger.info(f"  Current time: {time.strftime('%Y-%m-%d %H:%M:%S', current_struct)} (wday={current_struct.tm_wday})")
+                logger.info(f"  Last update: {time.strftime('%Y-%m-%d %H:%M:%S', last_update_struct)} (wday={last_update_struct.tm_wday})")
+                logger.info(f"  Config day: {config.day}")
                 
-                # Only check if we've already updated this week on the specified day
-                should_update = last_update_struct.tm_wday != config.day
+                # Only allow update if:
+                # 1. It's the configured day of the week
+                # 2. The last update was NOT on this day
+                # 3. The last update was in a previous week
+                current_date = current_struct.tm_year, current_struct.tm_mon, current_struct.tm_mday
+                last_update_date = last_update_struct.tm_year, last_update_struct.tm_mon, last_update_struct.tm_mday
+                
+                should_update = (current_struct.tm_wday == config.day and 
+                               (current_date != last_update_date))
+
+                logger.info(f"  Should update: {should_update}")
 
             if should_update:
                 # Double-check that another instance hasn't updated while we were checking
                 current_last_update = self.agents.get(agent_id)
                 if current_last_update != last_update_time:
+                    logger.info(f"Agent {agent_id} was updated by another instance")
                     return {"should_update": False}
                 
+                # Update the timestamp
                 self.agents[agent_id] = current_time
-                logger.debug(f"Updated agent {agent_id}, new wday: {time.localtime(current_time).tm_wday}")
+                logger.info(f"Successfully updated agent {agent_id}")
                 return {"should_update": True}
 
             return {"should_update": False}
