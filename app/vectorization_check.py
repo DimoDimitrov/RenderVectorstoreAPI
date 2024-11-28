@@ -34,6 +34,19 @@ class AgentCheck:
             last_update_struct = time.localtime(last_update_time)
             should_update = False
 
+            # Log detailed information for every request
+            logger.info(f"Agent {agent_id} - {config.update_type} check:")
+            logger.info(f"  Current time: {time.strftime('%Y-%m-%d %H:%M:%S', current_struct)} (wday={current_struct.tm_wday})")
+            if last_update_time is not None:
+                last_update_struct = time.localtime(last_update_time)
+                logger.info(f"  Last update: {time.strftime('%Y-%m-%d %H:%M:%S', last_update_struct)} (wday={last_update_struct.tm_wday})")
+            else:
+                logger.info(f"  Last update: None (new agent)")
+            if config.update_type == "weekly":
+                logger.info(f"  Config day: {config.day}")
+            elif config.update_type == "hourly":
+                logger.info(f"  Config hour_gap: {config.hour_gap}")
+
             if config.update_type == "hourly":
                 hours_passed = (current_time - last_update_time) / 3600
                 should_update = hours_passed >= config.hour_gap
@@ -50,12 +63,6 @@ class AgentCheck:
                 )))
                 should_update = last_update_time < current_day_start
             elif config.update_type == "weekly":
-                # Debug the values
-                logger.info(f"Agent {agent_id} - Weekly check:")
-                logger.info(f"  Current time: {time.strftime('%Y-%m-%d %H:%M:%S', current_struct)} (wday={current_struct.tm_wday})")
-                logger.info(f"  Last update: {time.strftime('%Y-%m-%d %H:%M:%S', last_update_struct)} (wday={last_update_struct.tm_wday})")
-                logger.info(f"  Config day: {config.day}")
-                
                 # Only allow update if:
                 # 1. It's the configured day of the week
                 # 2. The last update was NOT on this day
