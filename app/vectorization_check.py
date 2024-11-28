@@ -17,17 +17,23 @@ class AgentConfig(BaseModel):
 class AgentCheck:
     def __init__(self):
         self.agents: Dict[str, float] = {}
-        self.lock = threading.Lock()
+        # Initialize as RLock to allow reentrant locking
+        self._lock = threading.RLock()
 
     def check_and_register_agent(self, agent_id: str, config: AgentConfig) -> Dict[str, bool]:
-        with self.lock:
-            print(f"Checking agent {agent_id} with config type:{config.update_type}")
+        # Ensure we acquire the lock before ANY operations
+        with self._lock:
+            # Log FIRST thing after acquiring lock
+            logger.info(f"Lock acquired - Agent {agent_id} - {config.update_type} check:")
+            
             current_time = time.time()
             current_struct = time.localtime(current_time)
             
             # Get the current state before any modifications
             last_update_time = self.agents.get(agent_id)
+            
             if last_update_time is None:
+                logger.info(f"New agent {agent_id} - registering")
                 self.agents[agent_id] = current_time
                 return {"should_update": True}
                 
@@ -90,7 +96,7 @@ class AgentCheck:
             return {"should_update": False}
 
     def delete_agent(self, agent_id: str) -> Dict[str, str]:
-        with self.lock:
+        with self._lock:
             print(f"Deleting agent {agent_id}")
             if agent_id in self.agents:
                 del self.agents[agent_id]
