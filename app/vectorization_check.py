@@ -8,8 +8,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 class AgentConfig(BaseModel):
-    hour: int
-    minute: int
+    update_type: str  # 'hourly', 'daily', or 'weekly'
+    hour_gap: int = None  # For hourly updates
+    hour: int = None  # For daily/weekly updates
+    minute: int = None  # For daily/weekly updates
+    day: int = None  # For weekly updates, 0 = Monday, 6 = Sunday
 
 class AgentCheck:
     def __init__(self):
@@ -18,24 +21,41 @@ class AgentCheck:
 
     def check_and_register_agent(self, agent_id: str, config: AgentConfig) -> Dict[str, bool]:
         with self.lock:
-            print(f"Checking agent {agent_id} with config {config.hour}:{config.minute}")
+            print(f"Checking agent {agent_id} with config type:{config.update_type}")
             current_time = time.time()
-            current_hour = time.localtime(current_time).tm_hour
-            current_minute = time.localtime(current_time).tm_min
+            current_struct = time.localtime(current_time)
 
             if agent_id not in self.agents:
                 self.agents[agent_id] = current_time
                 return {"should_update": True}
 
-            if current_hour == config.hour and current_minute >= config.minute:
-                last_update_time = self.agents[agent_id]
-                last_update_struct = time.localtime(last_update_time)
-                
-                if (last_update_struct.tm_hour != config.hour or 
-                    last_update_struct.tm_min < config.minute or
-                    last_update_struct.tm_mday != time.localtime(current_time).tm_mday):
-                    self.agents[agent_id] = current_time
-                    return {"should_update": True}
+            last_update_time = self.agents[agent_id]
+            last_update_struct = time.localtime(last_update_time)
+
+            should_update = False
+            if config.update_type == "hourly":
+                hours_passed = (current_time - last_update_time) / 3600  # Convert seconds to hours
+                should_update = hours_passed >= config.hour_gap
+            elif config.update_type == "daily":
+                if (current_struct.tm_hour == config.hour and 
+                    current_struct.tm_min >= config.minute):
+                    should_update = (last_update_struct.tm_mday != current_struct.tm_mday or
+                                   last_update_struct.tm_hour < config.hour or
+                                   (last_update_struct.tm_hour == config.hour and 
+                                    last_update_struct.tm_min < config.minute))
+            elif config.update_type == "weekly":
+                if (current_struct.tm_wday == config.day and
+                    current_struct.tm_hour == config.hour and 
+                    current_struct.tm_min >= config.minute):
+                    should_update = (last_update_struct.tm_wday != config.day or
+                                   last_update_struct.tm_mday != current_struct.tm_mday or
+                                   last_update_struct.tm_hour < config.hour or
+                                   (last_update_struct.tm_hour == config.hour and 
+                                    last_update_struct.tm_min < config.minute))
+
+            if should_update:
+                self.agents[agent_id] = current_time
+                return {"should_update": True}
 
             return {"should_update": False}
 
