@@ -50,6 +50,10 @@ class AgentCheck:
                 )))
                 should_update = last_update_time < current_day_start
             elif config.update_type == "weekly":
+                # Debug the values
+                logger.debug(f"Current wday: {current_struct.tm_wday}, Config day: {config.day}, "
+                           f"Last update wday: {last_update_struct.tm_wday}")
+                
                 # Only check if we've already updated this week on the specified day
                 should_update = last_update_struct.tm_wday != config.day
 
@@ -60,6 +64,7 @@ class AgentCheck:
                     return {"should_update": False}
                 
                 self.agents[agent_id] = current_time
+                logger.debug(f"Updated agent {agent_id}, new wday: {time.localtime(current_time).tm_wday}")
                 return {"should_update": True}
 
             return {"should_update": False}
