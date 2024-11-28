@@ -37,12 +37,7 @@ class AgentCheck:
                 hours_passed = (current_time - last_update_time) / 3600  # Convert seconds to hours
                 should_update = hours_passed >= config.hour_gap
             elif config.update_type == "daily":
-                if (current_struct.tm_hour == config.hour and 
-                    current_struct.tm_min >= config.minute):
-                    should_update = (last_update_struct.tm_mday != current_struct.tm_mday or
-                                   last_update_struct.tm_hour < config.hour or
-                                   (last_update_struct.tm_hour == config.hour and 
-                                    last_update_struct.tm_min < config.minute))
+                should_update = last_update_struct.tm_mday != current_struct.tm_mday
             elif config.update_type == "weekly":
                 if (current_struct.tm_wday == config.day and
                     current_struct.tm_hour == config.hour and 
@@ -55,6 +50,7 @@ class AgentCheck:
 
             if should_update:
                 self.agents[agent_id] = current_time
+                print(f"Agent {agent_id} approved to update")
                 return {"should_update": True}
 
             return {"should_update": False}
