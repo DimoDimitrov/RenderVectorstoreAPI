@@ -1,14 +1,16 @@
+from multiprocessing import Lock, Manager
 from fastapi import FastAPI, HTTPException, Query
 from typing import Dict
 from pydantic import BaseModel
-import threading
 import time
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Create a global lock
-_GLOBAL_LOCK = threading.Lock()  # Using a regular Lock instead of RLock
+# Create a process-safe lock and shared dictionary
+manager = Manager()
+_SHARED_AGENTS = manager.dict()
+_PROCESS_LOCK = manager.Lock()  # Process-safe lock
 
 class AgentConfig(BaseModel):
     update_type: str  # 'hourly', 'daily', or 'weekly'
@@ -19,11 +21,11 @@ class AgentConfig(BaseModel):
 
 class AgentCheck:
     def __init__(self):
-        self.agents: Dict[str, float] = {}
+        self.agents = _SHARED_AGENTS
 
     def check_and_register_agent(self, agent_id: str, config: AgentConfig) -> Dict[str, bool]:
-        with _GLOBAL_LOCK:  # Use the global lock instead of instance lock
-            time.sleep(10)
+        with _PROCESS_LOCK:  # Use process-safe lock
+            time.sleep(10)  # Test delay
             logger.info(f"Lock acquired - Agent {agent_id} - {config.update_type} check:")
             logger.info(f"List of agents before registration: {self.agents}")
 
@@ -96,7 +98,7 @@ class AgentCheck:
             return {"should_update": False}
 
     def delete_agent(self, agent_id: str) -> Dict[str, str]:
-        with _GLOBAL_LOCK:  # Use the global lock instead of instance lock
+        with _PROCESS_LOCK:  # Use process-safe lock
             print(f"Deleting agent {agent_id}")
             if agent_id in self.agents:
                 del self.agents[agent_id]
