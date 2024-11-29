@@ -11,4 +11,5 @@ ________________________
 
 The vectorization_check file contains logic that saves all the agents that have passed the checking process. 
 The process can check if the needed update type is hourly, daily or monthly update.
+
 -----------------------
