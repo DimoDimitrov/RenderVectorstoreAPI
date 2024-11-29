@@ -28,24 +28,16 @@ class AgentCheck:
             current_time = time.time()
             current_struct = time.localtime(current_time)
             
-            # Get the current state before any modifications
             last_update_time = self.agents.get(agent_id)
             
-            # For new agents, we need to check again after getting the lock
-            # to ensure another instance hasn't registered it
             if last_update_time is None:
-                # Double check if another instance registered while we were waiting
-                if agent_id in self.agents:
-                    last_update_time = self.agents[agent_id]
-                else:
-                    logger.info(f"New agent {agent_id} - registering")
-                    self.agents[agent_id] = current_time
-                    return {"should_update": True}
+                logger.info(f"New agent {agent_id} - registering")
+                self.agents[agent_id] = current_time
+                return {"should_update": True}
                 
             last_update_struct = time.localtime(last_update_time)
             should_update = False
 
-            # Log detailed information for every request
             logger.info(f"Agent {agent_id} - {config.update_type} check:")
             logger.info(f"  Current time: {time.strftime('%Y-%m-%d %H:%M:%S', current_struct)} (wday={current_struct.tm_wday})")
             if last_update_time is not None:
