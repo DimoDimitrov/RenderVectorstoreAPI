@@ -23,6 +23,7 @@ class AgentCheck:
 
     def check_and_register_agent(self, agent_id: str, config: AgentConfig) -> Dict[str, bool]:
         with _GLOBAL_LOCK:  # Use the global lock instead of instance lock
+            time.sleep(60)
             logger.info(f"Lock acquired - Agent {agent_id} - {config.update_type} check:")
             logger.info(f"List of agents before registration: {self.agents}")
 
@@ -36,6 +37,7 @@ class AgentCheck:
                 self.agents[agent_id] = current_time
                 self.agents.update({agent_id: current_time})
                 logger.info(f"List of agents after registration: {self.agents}")
+                
                 if agent_id not in self.agents:
                     logger.error(f"Failed to register agent {agent_id}")
                     return {"should_update": False}
