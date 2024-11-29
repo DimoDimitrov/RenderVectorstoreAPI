@@ -24,7 +24,6 @@ class AgentCheck:
     def check_and_register_agent(self, agent_id: str, config: AgentConfig) -> Dict[str, bool]:
         with _GLOBAL_LOCK:  # Use the global lock instead of instance lock
             logger.info(f"Lock acquired - Agent {agent_id} - {config.update_type} check:")
-            print(f"List of agents: {self.agents}")
             
             current_time = time.time()
             current_struct = time.localtime(current_time)
@@ -34,6 +33,11 @@ class AgentCheck:
             if last_update_time is None:
                 logger.info(f"New agent {agent_id} - registering")
                 self.agents[agent_id] = current_time
+                self.agents.update({agent_id: current_time})
+                logger.info(f"List of agents after registration: {self.agents}")
+                if agent_id not in self.agents:
+                    logger.error(f"Failed to register agent {agent_id}")
+                    return {"should_update": False}
                 return {"should_update": True}
                 
             last_update_struct = time.localtime(last_update_time)
@@ -67,10 +71,6 @@ class AgentCheck:
                 )))
                 should_update = last_update_time < current_day_start
             elif config.update_type == "weekly":
-                # Only allow update if:
-                # 1. It's the configured day of the week
-                # 2. The last update was NOT on this day
-                # 3. The last update was in a previous week
                 current_date = current_struct.tm_year, current_struct.tm_mon, current_struct.tm_mday
                 last_update_date = last_update_struct.tm_year, last_update_struct.tm_mon, last_update_struct.tm_mday
                 
@@ -80,7 +80,6 @@ class AgentCheck:
                 logger.info(f"  Should update: {should_update}")
 
             if should_update:
-                # Double-check that another instance hasn't updated while we were checking
                 current_last_update = self.agents.get(agent_id)
                 if current_last_update != last_update_time:
                     logger.info(f"Agent {agent_id} was updated by another instance")
