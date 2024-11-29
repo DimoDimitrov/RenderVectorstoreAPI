@@ -7,6 +7,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Create a global lock
+_GLOBAL_LOCK = threading.Lock()  # Using a regular Lock instead of RLock
+
 class AgentConfig(BaseModel):
     update_type: str  # 'hourly', 'daily', or 'weekly'
     hour_gap: int = None  # For hourly updates
@@ -17,11 +20,9 @@ class AgentConfig(BaseModel):
 class AgentCheck:
     def __init__(self):
         self.agents: Dict[str, float] = {}
-        # Initialize as RLock to allow reentrant locking
-        self._lock = threading.RLock()
 
     def check_and_register_agent(self, agent_id: str, config: AgentConfig) -> Dict[str, bool]:
-        with self._lock:
+        with _GLOBAL_LOCK:  # Use the global lock instead of instance lock
             logger.info(f"Lock acquired - Agent {agent_id} - {config.update_type} check:")
             
             current_time = time.time()
@@ -100,7 +101,7 @@ class AgentCheck:
             return {"should_update": False}
 
     def delete_agent(self, agent_id: str) -> Dict[str, str]:
-        with self._lock:
+        with _GLOBAL_LOCK:  # Use the global lock instead of instance lock
             print(f"Deleting agent {agent_id}")
             if agent_id in self.agents:
                 del self.agents[agent_id]
