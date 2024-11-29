@@ -1,5 +1,5 @@
 Render Vectorization API. 
-
+-
 This code is purposed to be uploaded on a Render server wich has a persist disc. 
 
 It has two main purposes:
