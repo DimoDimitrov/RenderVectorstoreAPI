@@ -25,9 +25,6 @@ class AgentCheck:
 
     def check_and_register_agent(self, agent_id: str, config: AgentConfig) -> Dict[str, bool]:
         with _PROCESS_LOCK:  # Use process-safe lock
-            time.sleep(10)  # Test delay
-            logger.info(f"Lock acquired - Agent {agent_id} - {config.update_type} check:")
-            logger.info(f"List of agents before registration: {self.agents}")
 
             current_time = time.time()
             current_struct = time.localtime(current_time)
@@ -38,7 +35,6 @@ class AgentCheck:
                 logger.info(f"New agent {agent_id} - registering")
                 self.agents[agent_id] = current_time
                 self.agents.update({agent_id: current_time})
-                logger.info(f"List of agents after registration: {self.agents}")
                 
                 if agent_id not in self.agents:
                     logger.error(f"Failed to register agent {agent_id}")
